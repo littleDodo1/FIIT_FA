@@ -4,7 +4,6 @@ public class Node<TKey, TValue, TNode>(TKey key, TValue value) where TNode : Nod
 {
     public TKey Key { get; set; } = key;
     public TValue Value { get; set; } = value;
-    public int Depth { get; set; } = 1;
     
     public TNode? Left { get; set; }
     public TNode? Right { get; set; }

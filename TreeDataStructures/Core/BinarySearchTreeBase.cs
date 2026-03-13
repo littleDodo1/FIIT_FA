@@ -176,21 +176,6 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
         return node;
     }
 
-    protected void UpdateDepth(TNode? node)
-        {
-            while (node != null)
-            {
-                int leftD  = node.Left?.Depth  ?? 0;
-                int rightD = node.Right?.Depth ?? 0;
-                int newD   = 1 + Math.Max(leftD, rightD);
-
-                if (newD == node.Depth) break;
-
-                node.Depth = newD;
-                node = node.Parent;
-            }
-        }
-
     protected void RotateLeft(TNode x)
     {
         if (x == null || x.Right == null) throw new System.Exception("Невозможно повернуть");
@@ -210,9 +195,6 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
 
         y.Left = x;
         x.Parent = y;
-
-        UpdateDepth(x);
-        UpdateDepth(y);
     }
 
     protected void RotateRight(TNode y)
@@ -234,9 +216,6 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
 
         x.Right = y;
         y.Parent = x;
-
-        UpdateDepth(y);
-        UpdateDepth(x);
     }
     
     protected void RotateBigLeft(TNode x)
@@ -328,7 +307,7 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
             _currentEntry = default;
         }
 
-        private int TargetStage => _strategy switch
+        private int _numOfStrat => _strategy switch
         {
             TraversalStrategy.PreOrder or TraversalStrategy.PostOrderReverse => 0,   
             TraversalStrategy.InOrder or TraversalStrategy.InOrderReverse => 1,
@@ -336,7 +315,7 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
             _ => 1
         };
 
-        private bool IsReverse => _strategy switch
+        private bool _isReverse => _strategy switch
         {
             TraversalStrategy.InOrderReverse or TraversalStrategy.PreOrderReverse or TraversalStrategy.PostOrderReverse => true,
             _ => false
@@ -359,18 +338,29 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
         {
         }
 
+        private int GetDepth(TNode? node)
+        {
+            int depth = 0;
+            while (node?.Parent != null)
+            {
+                depth++;
+                node = node.Parent;
+            }
+            return depth;
+        }
+
         public bool MoveNext()
         {
             while (_currentNode != null) {
                 TNode node = _currentNode;
 
-                TNode? first = IsReverse ? node.Right : node.Left;
-                TNode? second = IsReverse ? node.Left : node.Right;
+                TNode? first = _isReverse ? node.Right : node.Left;
+                TNode? second = _isReverse ? node.Left : node.Right;
 
                 if (_previousNode == node.Parent)
                 {
-                    if (TargetStage == 0) {
-                        _currentEntry = new TreeEntry<TKey, TValue>(node.Key, node.Value, node.Depth);
+                    if (_numOfStrat == 0) {
+                        _currentEntry = new TreeEntry<TKey, TValue>(node.Key, node.Value, GetDepth(node));
                         _previousNode = node;
 
                         _currentNode = first ?? second ?? node.Parent;
@@ -386,9 +376,9 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
 
                 if (_previousNode == first || (_previousNode == node.Parent && first == null))
                 {
-                    if (TargetStage == 1)
+                    if (_numOfStrat == 1)
                     {
-                        _currentEntry = new TreeEntry<TKey, TValue>(node.Key, node.Value, node.Depth);
+                        _currentEntry = new TreeEntry<TKey, TValue>(node.Key, node.Value, GetDepth(node));
                         _previousNode = node;
 
                         _currentNode = second ?? node.Parent;
@@ -403,9 +393,9 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
                     }
                 }
 
-                if (TargetStage == 2) 
+                if (_numOfStrat == 2) 
                 {
-                    _currentEntry = new TreeEntry<TKey, TValue>(node.Key, node.Value, node.Depth);
+                    _currentEntry = new TreeEntry<TKey, TValue>(node.Key, node.Value, GetDepth(node));
                     _previousNode = node;
                     _currentNode = node.Parent;
                     return true;
