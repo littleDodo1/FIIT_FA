@@ -424,9 +424,9 @@ public abstract class BinarySearchTreeBase<TKey, TValue, TNode>(IComparer<TKey>?
     public bool Contains(KeyValuePair<TKey, TValue> item) => ContainsKey(item.Key);
     public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
     {
-        if (array == null) throw new ArgumentNullException(nameof(array));
-        if (arrayIndex < 0 || arrayIndex > array.Length) throw new ArgumentOutOfRangeException(nameof(arrayIndex));
-        if (array.Length - arrayIndex < Count) throw new ArgumentException("Недостаточно места в массиве.");
+        if (array == null) throw new Exception(nameof(array));
+        if (arrayIndex < 0 || arrayIndex > array.Length) throw new Exception(nameof(arrayIndex));
+        if (array.Length - arrayIndex < Count) throw new Exception("Недостаточно места в массиве.");
         var iterator = new TreeIterator(Root, TraversalStrategy.InOrder);
         while (iterator.MoveNext())
         {
