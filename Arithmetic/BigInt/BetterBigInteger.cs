@@ -16,9 +16,11 @@ public sealed class BetterBigInteger : IBigInteger
     public bool IsNegative => _signBit == 1;
 
     private const int KaratsubaThreshold = 32;
+    private const int FftThreshold = 1024;
 
     private static readonly IMultiplier _simpleMultiplier = new SimpleMultiplier();
     private static readonly IMultiplier _karatsubaMultiplier = new KaratsubaMultiplier();
+    private static readonly IMultiplier _fftMultiplier = new FftMultiplier();
     
     public BetterBigInteger(uint[] digits, bool isNegative = false)
     {
@@ -290,14 +292,29 @@ public sealed class BetterBigInteger : IBigInteger
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(b);
 
-        if ((a.GetDigits().Length == 1 && a.GetDigits()[0] == 0) || (b.GetDigits().Length == 1 && b.GetDigits()[0] == 0)) return new BetterBigInteger(new uint[] { 0 });
+        if ((a.GetDigits().Length == 1 && a.GetDigits()[0] == 0) 
+            || (b.GetDigits().Length == 1 && b.GetDigits()[0] == 0)) 
+        {
+            return new BetterBigInteger(new uint[] { 0 });
+        }
 
         int aLen = a.GetDigits().Length;
         int bLen = b.GetDigits().Length;
 
-        IMultiplier strategy = (aLen >= KaratsubaThreshold && bLen >= KaratsubaThreshold) 
-            ? _karatsubaMultiplier 
-            : _simpleMultiplier;
+        IMultiplier strategy;
+
+        if (aLen >= FftThreshold && bLen >= FftThreshold)
+        {
+            strategy = _fftMultiplier;
+        }
+        else if (aLen >= KaratsubaThreshold && bLen >= KaratsubaThreshold)
+        {
+            strategy = _karatsubaMultiplier;
+        }
+        else
+        {
+            strategy = _simpleMultiplier;
+        }
 
         return strategy.Multiply(a, b);
     }   
@@ -412,8 +429,8 @@ public sealed class BetterBigInteger : IBigInteger
         if (shift < 0) return a >> -shift;
         if (shift == 0 || (a.GetDigits().Length == 1 && a.GetDigits()[0] == 0)) return a;
 
-        int wordShift = shift / 32;
-        int bitShift = shift % 32;
+        int wordShift = shift / (sizeof(uint) * 8);
+        int bitShift = shift % (sizeof(uint) * 8);
 
         ReadOnlySpan<uint> digits = a.GetDigits();
         uint[] result;

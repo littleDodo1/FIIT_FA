@@ -1,11 +1,14 @@
 ﻿using System;
-using System.Numerics;
 using Arithmetic.BigInt.Interfaces;
 
 namespace Arithmetic.BigInt.MultiplyStrategy;
 
 internal class FftMultiplier : IMultiplier
 {
+    // Магические константы для 32-битного простого поля и я в душе не чаю как она берется 
+    private const uint MOD = 2013265921; 
+    private const uint PRIMITIVE_ROOT = 31;      
+
     public BetterBigInteger Multiply(BetterBigInteger a, BetterBigInteger b)
     {
         ArgumentNullException.ThrowIfNull(a);
@@ -20,59 +23,59 @@ internal class FftMultiplier : IMultiplier
             return new BetterBigInteger([0]);
         }
 
-        uint[] a16 = SplitTo16(aDigits);
-        uint[] b16 = SplitTo16(bDigits);
+        uint[] a8 = SplitTo8(aDigits);
+        uint[] b8 = SplitTo8(bDigits);
 
-        int neededLength = a16.Length + b16.Length - 1;
+        int neededLength = a8.Length + b8.Length - 1;
 
         int n = 1;
-        while (n < neededLength) {
+        while (n < neededLength) 
+        {
             n <<= 1;
         }
 
-        Complex[] fa = new Complex[n];
-        Complex[] fb = new Complex[n]; 
+        uint[] fa = new uint[n];
+        uint[] fb = new uint[n]; 
 
-        for (int i = 0; i < a16.Length; i++) fa[i] = new Complex(a16[i], 0);
-        for (int i = 0; i < b16.Length; i++) fb[i] = new Complex(b16[i], 0);
+        for (int i = 0; i < a8.Length; i++) fa[i] = a8[i];
+        for (int i = 0; i < b8.Length; i++) fb[i] = b8[i];
 
-        ExecuteFft(fa, false);
-        ExecuteFft(fb, false);
+        ExecuteNtt(fa, false);
+        ExecuteNtt(fb, false);
 
         for (int i = 0; i < n; i++)
         {
-            fa[i] *= fb[i];
+            fa[i] = MultiplyMod(fa[i], fb[i], MOD);
         }
 
-        ExecuteFft(fa, true);
+        ExecuteNtt(fa, true);
 
-        uint[] res16 = new uint[n];
-        long carry = 0;
+        uint[] res8 = new uint[n];
+        uint carry = 0;
 
         for (int i = 0; i < neededLength; i++)
         {
-            long val = (long)Math.Round(fa[i].Real) + carry;
+            uint val = fa[i] + carry; 
 
-            res16[i] = (uint)(val & 0xFFFF);
-            carry = val >> 16;
+            res8[i] = val & 0xFF; 
+            carry = val >> 8;    
         }
 
         int tailIndex = neededLength;
         while (carry > 0 && tailIndex < n)
         { 
-            res16[tailIndex] = (uint)(carry & 0xFFFF);
-            carry >>= 16;
+            res8[tailIndex] = carry & 0xFF;
+            carry >>= 8;
             tailIndex++;
         }
 
-        uint[] result32 = MergeTo32(res16, tailIndex, carry);
-
+        uint[] result32 = MergeTo32(res8, tailIndex);
         bool isNegative = a.IsNegative != b.IsNegative; 
         
         return new BetterBigInteger(result32, isNegative);
     }
 
-    private static void ExecuteFft(Complex[] a, bool invert)
+    private static void ExecuteNtt(uint[] a, bool invert)
     {
         int n = a.Length;
 
@@ -90,68 +93,99 @@ internal class FftMultiplier : IMultiplier
 
         for (int len = 2; len <= n; len <<= 1)
         {
-            double angle = 2 * Math.PI / len * (invert ? -1 : 1);
-            Complex wlen = new Complex(Math.Cos(angle), Math.Sin(angle));
+            uint wlen = PowerMod(PRIMITIVE_ROOT, (MOD - 1) / (uint)len, MOD);
+            
+            if (invert)
+            {
+                wlen = PowerMod(wlen, MOD - 2, MOD);
+            }
             
             for (int i = 0; i < n; i += len)
             {
-                Complex w = Complex.One; 
+                uint w = 1; 
                 int half = len / 2;
                 
                 for (int j = 0; j < half; j++)
                 {
-                    Complex u = a[i + j];
-                    Complex v = a[i + j + half] * w;
+                    uint u = a[i + j];
+                    uint v = MultiplyMod(a[i + j + half], w, MOD);
                     
-                    a[i + j] = u + v;
-                    a[i + j + half] = u - v;
-                    w *= wlen;
+                    a[i + j] = (u + v >= MOD) ? (u + v - MOD) : (u + v);
+                    a[i + j + half] = (u < v) ? (u + MOD - v) : (u - v);
+                    
+                    w = MultiplyMod(w, wlen, MOD);
                 }
             }
         }
 
         if (invert)
         {
+            uint nInv = PowerMod((uint)n, MOD - 2, MOD);
+            
             for (int i = 0; i < n; i++)
             {
-                a[i] /= n;
+                a[i] = MultiplyMod(a[i], nInv, MOD);
             }
         }
     }
 
-    private static uint[] SplitTo16(ReadOnlySpan<uint> digits)
+    private static uint MultiplyMod(uint a, uint b, uint mod)
     {
-        uint[] result = new uint[digits.Length * 2];
+        uint res = 0;
+        a %= mod;
+        
+        while (b > 0)
+        {
+            if ((b & 1) == 1)
+            {
+                res += a;
+                if (res >= mod) res -= mod;
+            }
 
+            a <<= 1;
+            if (a >= mod) a -= mod;
+            b >>= 1;
+        }
+        return res;
+    }
+
+    private static uint PowerMod(uint baseValue, uint exp, uint mod)
+    {
+        uint res = 1;
+        baseValue %= mod;
+        
+        while (exp > 0)
+        {
+            if ((exp & 1) == 1) res = MultiplyMod(res, baseValue, mod);
+            baseValue = MultiplyMod(baseValue, baseValue, mod);
+            exp >>= 1;
+        }
+        return res;
+    }
+
+    private static uint[] SplitTo8(ReadOnlySpan<uint> digits)
+    {
+        uint[] result = new uint[digits.Length * 4];
         for (int i = 0; i < digits.Length; i++)
         {
-            result[i * 2] = digits[i] & 0xFFFF;
-            result[i * 2 + 1] = digits[i] >> 16;
+            result[i * 4] = digits[i] & 0xFF;
+            result[i * 4 + 1] = (digits[i] >> 8) & 0xFF;
+            result[i * 4 + 2] = (digits[i] >> 16) & 0xFF;
+            result[i * 4 + 3] = digits[i] >> 24;
         }
-
         return result;
     }
 
-    private static uint[] MergeTo32(uint[] digits16, int usedLength, long leftOverCarry)
+    private static uint[] MergeTo32(uint[] digits8, int tailIndex)
     {
-        int length32 = (usedLength + 1) / 2;
-        
-        if (leftOverCarry > 0) length32++; 
-
+        int length32 = (tailIndex + 3) / 4;
         uint[] result = new uint[length32];
         
-        for (int i = 0; i < (usedLength + 1) / 2; i++)
+        for (int i = 0; i < tailIndex; i++)
         {
-            uint low = digits16[i * 2];
-            uint high = (i * 2 + 1 < usedLength) ? digits16[i * 2 + 1] : 0;
-            result[i] = low | (high << 16);
+            result[i / 4] |= (digits8[i] << ((i % 4) * 8));
         }
-
-        if (leftOverCarry > 0)
-        {
-            result[length32 - 1] = (uint)leftOverCarry;
-        }
-
+        
         return result;
     }
 }

@@ -4,7 +4,7 @@ namespace Arithmetic.BigInt.MultiplyStrategy;
 
 internal class KaratsubaMultiplier : IMultiplier
 {
-    private const int threshold = 32;
+    private const int thresh = 32;
 
     private readonly IMultiplier _simpleMultiplier = new SimpleMultiplier();
 
@@ -27,7 +27,7 @@ internal class KaratsubaMultiplier : IMultiplier
         ReadOnlySpan<uint> aDigits = a.GetDigits();
         ReadOnlySpan<uint> bDigits = b.GetDigits();
 
-        if (aDigits.Length <= threshold || bDigits.Length <= threshold)
+        if (aDigits.Length <= thresh || bDigits.Length <= thresh)
         {
             return _simpleMultiplier.Multiply(a, b);
         }
@@ -46,7 +46,7 @@ internal class KaratsubaMultiplier : IMultiplier
 
         BetterBigInteger z1 = MultiplyRecursive(x0 + x1, y0 + y1) - z0 - z2;
 
-        int shift = m * 32;
+        int shift = m * sizeof(uint);
         
         return (z2 << (shift * 2)) + (z1 << shift) + z0;
     }
